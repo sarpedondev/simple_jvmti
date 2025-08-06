@@ -800,8 +800,29 @@ impl JvmtiEnv {
         jvmti_unchecked!(self, SetThreadLocalStorage, thread, data).value(|| ())
     }
 
-    pub fn get_stack_trace(&self) {
-        panic!("Not implemented yet")
+    pub fn get_stack_trace(
+        &self,
+        thread: jthread,
+        max_frames: i32,
+    ) -> JvmtiResult<Vec<jvmtiFrameInfo>> {
+        let mut frames: Vec<jvmtiFrameInfo> = vec![unsafe { mem::zeroed() }; max_frames as usize];
+
+        let mut count: i32 = 0;
+
+        let error_code = jvmti_unchecked!(
+            self,
+            GetStackTrace,
+            thread,
+            0,
+            max_frames,
+            frames.as_mut_ptr(),
+            &mut count
+        );
+
+        error_code.value(|| {
+            frames.truncate(count as usize);
+            frames
+        })
     }
 
     pub fn get_tag(&self, object: jobject) -> JvmtiResult<jlong> {
