@@ -27,6 +27,9 @@ fn to_string(ptr: *mut c_char) -> String {
 }
 
 fn as_vec<T>(count: i32, ptr: *mut T) -> Vec<T> {
+    if ptr.is_null() {
+        return Vec::new();
+    }
     unsafe {
         let size = count as usize;
 
