@@ -2,7 +2,7 @@
 
 use crate::{errors::*, jvmti_sys::*};
 use jni::sys::*;
-use std::ffi::CString;
+use std::ffi::{CStr, CString};
 use std::mem::size_of;
 use std::os::raw::{c_char, c_uchar, c_void};
 use std::{mem, ptr};
@@ -35,6 +35,24 @@ fn as_vec<T>(count: i32, ptr: *mut T) -> Vec<T> {
 
         Vec::from_raw_parts(ptr, size, size)
     }
+}
+
+fn safe_to_string(jvmti: &JvmtiEnv, ptr: *mut c_char) -> String {
+    if ptr.is_null() {
+        return String::new();
+    }
+    let s = unsafe { CStr::from_ptr(ptr).to_string_lossy().into_owned() };
+    jvmti.deallocate(ptr.cast()).unwrap(); 
+    s
+}
+
+fn safe_as_vec<T: Copy>(jvmti: &JvmtiEnv, count: i32, ptr: *mut T) -> Vec<T> {
+    if ptr.is_null() || count <= 0 {
+        return Vec::new();
+    }
+    let vec = unsafe { std::slice::from_raw_parts(ptr, count as usize).to_vec() };
+    jvmti.deallocate(ptr.cast()).unwrap();
+    vec
 }
 
 fn as_c_char(name: &str) -> *const c_char {
@@ -386,7 +404,7 @@ impl JvmtiEnv {
         let methods_ptr: *mut *mut jmethodID = &mut methods;
 
         jvmti_unchecked!(self, GetClassMethods, class, count_ptr, methods_ptr)
-            .value(|| as_vec(count, methods))
+            .value(|| safe_as_vec(self, count, methods))
     }
 
     pub fn get_class_fields(&self, class: jclass) -> JvmtiResult<Vec<jfieldID>> {
@@ -523,7 +541,7 @@ impl JvmtiEnv {
             generic_ptr
         );
 
-        error.value(|| (to_string(name), to_string(signature), to_string(generic)))
+        error.value(|| (safe_to_string(self, name), safe_to_string(self, signature), safe_to_string(self, generic)))
     }
 
     pub fn get_method_declaring_class(&self, method: jmethodID) -> JvmtiResult<jclass> {
@@ -642,7 +660,7 @@ impl JvmtiEnv {
         let classes_ptr: *mut *mut jclass = &mut classes;
 
         jvmti_unchecked!(self, GetLoadedClasses, count_ptr, classes_ptr)
-            .value(|| as_vec(count, classes))
+            .value(|| safe_as_vec(self, count, classes))
     }
 
     pub fn get_class_loader_classes(&self, initiating_loader: jobject) -> JvmtiResult<Vec<jclass>> {
